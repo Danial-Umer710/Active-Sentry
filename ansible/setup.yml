@@ -1,0 +1,54 @@
+---
+- name: Sentry Server Setup (Swap & K3s)
+  hosts: sentry
+  become: yes # Run as root
+
+  tasks:
+    # --- 1. SWAP CREATION ---
+    - name: Check if swap exists
+      stat:
+        path: /swapfile
+      register: swap_status
+
+    - name: Create 4GB Swap file
+      command: fallocate -l 4G /swapfile
+      when: not swap_status.stat.exists
+
+    - name: Set swap file permissions
+      file:
+        path: /swapfile
+        mode: '0600'
+
+    - name: Make swap file
+      command: mkswap /swapfile
+      when: not swap_status.stat.exists
+
+    - name: Enable swap
+      command: swapon /swapfile
+      when: not swap_status.stat.exists
+
+    - name: Add swap to fstab so it survives reboots
+      lineinfile:
+        path: /etc/fstab
+        line: '/swapfile none swap sw 0 0'
+        state: present
+
+    # --- 2. K3S INSTALLATION ---
+    - name: Install K3s (Lightweight Kubernetes)
+      shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sh -
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Wait for K3s to be ready
+      command: k3s kubectl get nodes
+      register: k3s_status
+      until: k3s_status.rc == 0
+      retries: 5
+      delay: 10
+
+    # --- 3. GET KUBECONFIG ---
+    - name: Fetch kubeconfig file to laptop
+      fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ./kubeconfig.yaml
+        flat: yes

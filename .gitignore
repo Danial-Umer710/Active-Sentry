@@ -1,0 +1,16 @@
+# Terraform junk
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Python junk
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+
+# Large binaries
+*.exe
+*.so
+*.dylib
