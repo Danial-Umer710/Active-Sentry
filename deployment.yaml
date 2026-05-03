@@ -1,3 +1,70 @@
+# --- 1. REDIS (Persistence Layer) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-sentry
+  template:
+    metadata:
+      labels:
+        app: redis-sentry
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+spec:
+  selector:
+    app: redis-sentry
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+---
+# --- 2. SENTRY BRAIN (ML Intelligence Layer) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentry-brain-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentry-brain
+  template:
+    metadata:
+      labels:
+        app: sentry-brain
+    spec:
+      containers:
+      - name: sentry-brain
+        image: daniboy7/sentry-brain:v1
+        ports:
+        - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: brain-service
+spec:
+  selector:
+    app: sentry-brain
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+---
+# --- 3. ACTIVE SENTRY (Application Layer) ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,10 +81,21 @@ spec:
     spec:
       containers:
       - name: active-sentry
-        image: daniboy7/active-sentry-app:latest
+        image: daniboy7/active-sentry-app:v5
         ports:
         - containerPort: 5000
+        env:
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: BRAIN_URL
+          value: "http://brain-service/analyze"
+        - name: DISCORD_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: sentry-secrets
+              key: discord-url
 ---
+# --- 4. NETWORK GATEWAY (NodePort) ---
 apiVersion: v1
 kind: Service
 metadata:
@@ -30,3 +108,4 @@ spec:
     - port: 80
       targetPort: 5000
       nodePort: 30080
+  externalTrafficPolicy: Local
